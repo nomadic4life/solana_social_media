@@ -18,6 +18,7 @@ pub mod solana_social_media {
         senddit.authority = authority.key();
         senddit.treasury = authority.key();
         senddit.fee = (0.001 * 1e9) as u64; // 0.001 SOL
+        senddit.bump = ctx.bumps.senddit;
 
         return Ok(());
     }
@@ -44,7 +45,7 @@ pub mod solana_social_media {
 
         payout_fees(treasury, authority, senddit, None);
 
-        // the authority? what do we do with it?
+        post_store.authority = authority.key();
         post_store.posts = 0;
         post_store.bump = ctx.bumps.post_store;
 
@@ -270,7 +271,7 @@ pub struct InitPostStore<'info> {
         seeds = [
             (((Clock::get()
                 .unwrap()
-                .unix_timestamp.abs() as f64) / (60.0 * 60.0 * 24.0)) as u128)
+                .unix_timestamp.abs() as f64) / (60.0 * 60.0 * 24.0)) as u64 * 1000)
                     .to_string()
                     .as_bytes()
                     .as_ref(),
@@ -302,7 +303,7 @@ pub struct PostLink<'info> {
     pub authority: Signer<'info>,
 
 
-    /// CHEKC: Account must match the creator of the store
+    /// CHECK: Account must match the creator of the store
     #[account(
         mut,
         address = post_store.authority
@@ -314,10 +315,10 @@ pub struct PostLink<'info> {
         seeds = [
             (((Clock::get()
                 .unwrap()
-                .unix_timestamp.abs() as f64) / (60.0 * 60.0 * 24.0)) as u128)
+                .unix_timestamp.abs() as f64) / (60.0 * 60.0 * 24.0)) as u64 * 1000)
                     .to_string()
                     .as_bytes()
-                    .as_ref(),
+                    .as_ref()
         ], 
         bump = post_store.bump
     )]
@@ -385,7 +386,7 @@ pub struct UpvotePost<'info> {
         seeds = [
             (((Clock::get()
                 .unwrap()
-                .unix_timestamp.abs() as f64) / (60.0 * 60.0 * 24.0)) as u128)
+                .unix_timestamp.abs() as f64) / (60.0 * 60.0 * 24.0)) as u64 * 1000)
                     .to_string()
                     .as_bytes()
                     .as_ref(),
@@ -444,6 +445,7 @@ pub struct InitCommentStore<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(input: String)]
 pub struct PostComment<'info> {
     #[account(
         mut,
@@ -485,6 +487,7 @@ pub struct PostComment<'info> {
 
     #[account(
         init,
+        constraint = Comment::is_valid_comment_size(&input) @ ErrorCode::CommentInvalid,
         payer = authority,
         space = Comment::LEN,
         seeds = [
@@ -583,7 +586,7 @@ pub struct PostStore {
 }
 
 impl PostStore {
-    pub const LEN: usize = DISCRIMATOR + PUBKEY + USIGNED_128;
+    pub const LEN: usize = DISCRIMATOR + PUBKEY + USIGNED_128 + BUMP;
 }
 
 #[account]
@@ -601,7 +604,7 @@ impl Post {
 
     pub fn is_valid_post_size(link: &String) -> bool {
 
-        if link.len() >= MAX_COMMENT_SIZE || link.len() == EMPTY  {
+        if link.len() >= MAX_LINK_SIZE || link.len() == EMPTY  {
             return false
         }
 
@@ -633,6 +636,15 @@ pub struct Comment {
 impl Comment {
     pub const LEN: usize =
         DISCRIMATOR + PUBKEY + STRING_PREFIX + MAX_COMMENT_SIZE + UNSIGNED_64 + UNSIGNED_64 + BUMP;
+
+    pub fn is_valid_comment_size(comment: &String) -> bool {
+
+        if comment.len() >= MAX_COMMENT_SIZE || comment.len() == EMPTY  {
+            return false
+        }
+
+        return true;
+    }
 }
 
 #[error_code]
@@ -643,4 +655,5 @@ pub enum ErrorCode {
     CommentTooLarge,
     LinkTooLarge,
     LinkInvalidSize,
+    CommentInvalid,
 }

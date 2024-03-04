@@ -3,15 +3,205 @@ import { Program } from "@coral-xyz/anchor";
 import { SolanaSocialMedia } from "../target/types/solana_social_media";
 
 describe("solana_social_media", () => {
-  // Configure the client to use the local cluster.
+
   anchor.setProvider(anchor.AnchorProvider.env());
 
-  const program = anchor.workspace.SolanaSocialMedia as Program<SolanaSocialMedia>;
+  const program = anchor.workspace.SolanaSocialMedia as Program<SolanaSocialMedia>
+  const provider = anchor.getProvider()
+
+  const users = []
+
+  before(async () => {
+
+    const timestamp = Math.floor(Date.now() / (60 * 60 * 24) / 1000) * 1000
+    let postcount = 0
+    console.log(timestamp)
+    console.log(Buffer.from(timestamp.toString()))
+
+    const {
+      LAMPORTS_PER_SOL
+    } = anchor.web3
+
+    // deployer
+    // poster a
+    // poster b
+    // comment a
+    // comment b
+    // 
+
+    { // keypair accounts:
+      {
+
+
+        const account = anchor.web3.Keypair.generate()
+
+        const tx = await provider.connection.requestAirdrop(account.publicKey, 1 * LAMPORTS_PER_SOL)
+        const blockhash = await provider.connection.getLatestBlockhash()
+
+        await provider.connection.confirmTransaction({
+          ...blockhash,
+          signature: tx
+        }, 'confirmed')
+
+        users.push({
+          keypair: account, type: 'treasury'
+        })
+      }
+
+
+      {
+        const account = anchor.web3.Keypair.generate()
+
+        const tx = await provider.connection.requestAirdrop(account.publicKey, 10000 * LAMPORTS_PER_SOL)
+        const blockhash = await provider.connection.getLatestBlockhash()
+
+        await provider.connection.confirmTransaction({
+          ...blockhash,
+          signature: tx
+        }, 'confirmed')
+
+        users.push({
+          keypair: account, type: 'poster_a'
+        })
+      }
+    }
+
+
+    { // program derived accounts
+
+      {
+        const [senddit] = anchor.web3.PublicKey.findProgramAddressSync(
+          [Buffer.from('senddit')],
+          program.programId
+        )
+
+        users.push({
+          publicKey: senddit, type: 'senddit'
+        })
+      }
+
+      {
+        const [postStore] = anchor.web3.PublicKey.findProgramAddressSync(
+          [Buffer.from(timestamp.toString())],
+          program.programId
+        )
+
+        users.push({
+          publicKey: postStore, type: 'post_store'
+        })
+      }
+
+      {
+        const link = 'shared-link-0.com'
+        const postStore = users.find(user => user.type === 'post_store')
+        // get post_store.posts data, for now use post count
+        const [postLink] = anchor.web3.PublicKey.findProgramAddressSync(
+          [
+            postStore.publicKey.toBuffer(),
+            Buffer.from((++postcount).toString())
+          ],
+          program.programId
+        )
+
+        const [post_pda] = anchor.web3.PublicKey.findProgramAddressSync(
+          [
+            Buffer.from(link)
+          ],
+          program.programId
+        )
+
+        users.push({
+          publicKey: postLink, link, collision: post_pda, type: 'post_link'
+        })
+      }
+
+
+    }
+
+
+
+
+
+  })
 
   it("Is initialized!", async () => {
-    // Add your test here.
-    const tx = await program.methods.initialize().rpc();
-    console.log("Your transaction signature", tx);
+
+    const payer = users.find(user => user.type === 'treasury').keypair
+    const senddit = users.find(user => user.type === 'senddit')
+
+    const tx = await program.methods
+      .initialize()
+      .accounts({
+        authority: payer.publicKey,
+        senddit: senddit.publicKey,
+        systemProgram: anchor.web3.SystemProgram.programId
+      })
+      .signers([payer])
+      .rpc();
+
+    const blockhash = await provider.connection.getLatestBlockhash()
+    await provider.connection.confirmTransaction({
+      ...blockhash,
+      signature: tx
+    }, 'confirmed')
+  });
+
+
+  it("Init Post Store!", async () => {
+
+    const payer = users.find(user => user.type === 'poster_a').keypair
+    const treasury = users.find(user => user.type === 'treasury').keypair
+    const senddit = users.find(user => user.type === 'senddit')
+    const postStore = users.find(user => user.type === 'post_store')
+
+    const tx = await program.methods
+      .initPostStore()
+      .accounts({
+        authority: payer.publicKey,
+        treasury: treasury.publicKey,
+        senddit: senddit.publicKey,
+        postStore: postStore.publicKey,
+        systemProgram: anchor.web3.SystemProgram.programId
+      })
+      .signers([payer])
+      .rpc();
+
+    const blockhash = await provider.connection.getLatestBlockhash()
+    await provider.connection.confirmTransaction({
+      ...blockhash,
+      signature: tx
+    }, 'confirmed')
+  });
+
+
+  it("Post Link!", async () => {
+
+    const payer = users.find(user => user.type === 'poster_a').keypair
+    const treasury = users.find(user => user.type === 'treasury').keypair
+    const senddit = users.find(user => user.type === 'senddit')
+    const postStore = users.find(user => user.type === 'post_store')
+    const post = users.find(user => user.type === 'post_link')
+
+    const tx = await program.methods
+      .postLink(post.link)
+      .accounts({
+        authority: payer.publicKey,
+        treasury: treasury.publicKey,
+        senddit: senddit.publicKey,
+        postStore: postStore.publicKey,
+        posterWallet: payer.publicKey,
+        post: post.publicKey,
+        postPda: post.collision,
+        systemProgram: anchor.web3.SystemProgram.programId
+      })
+      .signers([payer])
+      .rpc();
+
+    const blockhash = await provider.connection.getLatestBlockhash()
+    await provider.connection.confirmTransaction({
+      ...blockhash,
+      signature: tx
+    }, 'confirmed')
   });
 });
 
