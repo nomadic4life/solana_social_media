@@ -15,6 +15,7 @@ describe("solana_social_media", () => {
 
     const timestamp = Math.floor(Date.now() / (60 * 60 * 24) / 1000) * 1000
     let postcount = 0
+    let commentcount = 0
     console.log(timestamp)
     console.log(Buffer.from(timestamp.toString()))
 
@@ -145,6 +146,22 @@ describe("solana_social_media", () => {
         })
       }
 
+      {
+
+        const commentStore = users.find(user => user.type === 'comment_store')
+        const [comment] = anchor.web3.PublicKey.findProgramAddressSync(
+          [
+            commentStore.publicKey.toBuffer(),
+            Buffer.from((++commentcount).toString())
+          ],
+          program.programId
+        )
+
+        users.push({
+          publicKey: comment, type: 'comment', count: commentcount, input: 'this is a comment'
+        })
+      }
+
 
     }
 
@@ -272,8 +289,11 @@ describe("solana_social_media", () => {
     const payer = users.find(user => user.type === 'comment_a').keypair
     const treasury = users.find(user => user.type === 'treasury').keypair
     const senddit = users.find(user => user.type === 'senddit')
-    const commentStore = users.find(user => user.type === 'comment_store')
+
     const post = users.find(user => user.type === 'post_link')
+    const commentStore = users.find(user => user.type === 'comment_store')
+    const comment = users.find(user => user.type === 'comment')
+
 
 
 
@@ -283,8 +303,10 @@ describe("solana_social_media", () => {
         authority: payer.publicKey,
         treasury: treasury.publicKey,
         senddit: senddit.publicKey,
-        commentStore: commentStore.publicKey,
         post: post.publicKey,
+
+        commentStore: commentStore.publicKey,
+
         systemProgram: anchor.web3.SystemProgram.programId
       })
       .signers([payer])
@@ -298,6 +320,41 @@ describe("solana_social_media", () => {
   });
 
 
+  it("Post Comment!", async () => {
+
+    const payer = users.find(user => user.type === 'comment_a').keypair
+    const treasury = users.find(user => user.type === 'treasury').keypair
+    const senddit = users.find(user => user.type === 'senddit')
+
+    const commentStore = users.find(user => user.type === 'comment_store')
+    const post = users.find(user => user.type === 'post_link')
+
+    const comment = users.find(user => user.type === 'comment')
+
+
+
+    const tx = await program.methods
+      .postComment(comment.input, payer.publicKey)
+      .accounts({
+        authority: payer.publicKey,
+        treasury: treasury.publicKey,
+        senddit: senddit.publicKey,
+        post: post.publicKey,
+        commenterWallet: payer.publicKey,
+        commentStore: commentStore.publicKey,
+        comment: comment.publicKey,
+        systemProgram: anchor.web3.SystemProgram.programId
+      })
+      .signers([payer])
+      .rpc();
+
+
+    const blockhash = await provider.connection.getLatestBlockhash()
+    await provider.connection.confirmTransaction({
+      ...blockhash,
+      signature: tx
+    }, 'confirmed')
+  });
 });
 
 // sessions

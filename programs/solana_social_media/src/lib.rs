@@ -112,7 +112,7 @@ pub mod solana_social_media {
 
         payout_fees(treasury, authority ,senddit, None);
 
-        // the authority? what do we do with it?
+        comment_store.authority = authority.key();
         comment_store.comments = 0;
         comment_store.bump = ctx.bumps.comment_store;
 
