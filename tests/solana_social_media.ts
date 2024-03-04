@@ -355,6 +355,41 @@ describe("solana_social_media", () => {
       signature: tx
     }, 'confirmed')
   });
+
+  it("Upvote Comment!", async () => {
+    const payer = users.find(user => user.type === 'comment_a').keypair
+    const treasury = users.find(user => user.type === 'treasury').keypair
+    const senddit = users.find(user => user.type === 'senddit')
+
+    const commentStore = users.find(user => user.type === 'comment_store')
+    const post = users.find(user => user.type === 'post_link')
+
+    const comment = users.find(user => user.type === 'comment')
+
+
+
+    const tx = await program.methods
+      .upvoteComment((1).toString())
+      .accounts({
+        authority: payer.publicKey,
+        treasury: treasury.publicKey,
+        senddit: senddit.publicKey,
+        post: post.publicKey,
+        commenterWallet: payer.publicKey,
+        commentStore: commentStore.publicKey,
+        comment: comment.publicKey,
+        systemProgram: anchor.web3.SystemProgram.programId
+      })
+      .signers([payer])
+      .rpc();
+
+
+    const blockhash = await provider.connection.getLatestBlockhash()
+    await provider.connection.confirmTransaction({
+      ...blockhash,
+      signature: tx
+    }, 'confirmed')
+  })
 });
 
 // sessions
