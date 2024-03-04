@@ -1,4 +1,4 @@
-use anchor_lang::{prelude::*, solana_program::syscalls};
+use anchor_lang::{prelude::*, solana_program::system_instruction::transfer, solana_program::program::invoke};
 
 declare_id!("59chiAcJ99ttxaDLxcsJh8Be2tChirZfWsWxkd2SRGDj");
 
@@ -6,10 +6,136 @@ declare_id!("59chiAcJ99ttxaDLxcsJh8Be2tChirZfWsWxkd2SRGDj");
 pub mod solana_social_media {
     use super::*;
 
+    // LOGIC
+    // implement update fees
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-        Ok(())
+
+        let Initialize {
+            senddit,
+            authority,
+            ..
+        } = ctx.accounts;
+
+        senddit.authority = authority.key();
+        senddit.treasury = authority.key();
+        senddit.fee = (0.001 * 1e9) as u64; // 0.001 SOL
+
+        return Ok(());
     }
+
+    pub fn update_fees(ctx: Context<UpdateFees>, amount: f64) -> Result<()> {
+        let UpdateFees {
+            senddit,
+            ..
+        } = ctx.accounts;
+
+        senddit.fee = (amount * 1e9) as u64;
+
+        return Ok(());
+    }
+
+    pub fn init_post_store(ctx: Context<InitPostStore>) -> Result<()> {
+        let InitPostStore {
+            senddit,
+            treasury,
+            post_store,
+            authority,
+            ..
+        } = ctx.accounts;
+
+        payout_fees(treasury,authority,senddit, None);
+
+        post_store.posts = 0;
+        post_store.bump = ctx.bumps.post_store;
+
+        return Ok(());
+    }
+
+    pub fn post_link(ctx: Context<PostLink>, link: String) -> Result<()> {
+        let PostLink {
+            senddit,
+            treasury,
+            post_store,
+            post,
+            authority,
+            poster_wallet,
+            ..
+        } = ctx.accounts;
+
+
+
+        payout_fees(poster_wallet,authority,senddit, Some(treasury));
+
+        post_store.posts = post_store
+            .posts.checked_add(1)
+            .ok_or(ErrorCode::OverflowUnderflow)?;
+
+        post.authority = authority.key();
+        post.link = link;
+        post.upvotes = 1;
+        post.comments  = 0;
+        post.bump = ctx.bumps.post;
+
+        return Ok(());
+    }
+
+    pub fn upvote_post(ctx: Context<UpvotePost>, _number: String) -> Result<()>  {
+
+        let UpvotePost {
+            senddit,
+            treasury,
+            post,
+            authority, 
+            poster_wallet,
+            ..
+        } = ctx.accounts;
+
+        payout_fees(poster_wallet,authority,senddit, Some(treasury));
+
+        post.upvotes = post
+            .upvotes
+            .checked_add(1)
+            .ok_or(ErrorCode::OverflowUnderflow)?;
+
+        return Ok(());
+    }
+
 }
+
+
+
+// UTILS
+
+pub fn payout_fees<'info>(
+    to: &mut UncheckedAccount<'info>,
+    from: &mut Signer<'info>,
+    senddit: &mut Account<'info, Senddit>,
+    treasury: Option<&mut UncheckedAccount<'info>>,
+) {
+    if let Some(treasury) = treasury {
+        invoke(
+            &transfer(
+                from.key,
+                treasury.key,
+                senddit.fee
+            ),
+            &[
+                from.to_account_info(),
+                treasury.to_account_info(),
+            ]
+        ).unwrap();
+    }
+
+    invoke(
+        &transfer(from.key, to.key, senddit.fee),
+        &[
+            from.to_account_info(),
+            to.to_account_info(),
+        ]
+    ).unwrap(); 
+}
+
+// DATA VALIDATORS
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
@@ -27,6 +153,22 @@ pub struct Initialize<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct UpdateFees<'info> {
+    #[account(
+        mut,
+        has_one = authority,
+        seeds = [
+            b"senddit"
+        ],
+        bump = senddit.bump
+    )]
+    pub senddit: Account<'info, Senddit>,
+
+    #[account(mut)]
+    pub authority: Signer<'info>,
 }
 
 #[derive(Accounts)]
@@ -55,7 +197,12 @@ pub struct InitPostStore<'info> {
         payer = authority,
         space = PostStore::LEN,
         seeds = [
-            (((Clock::get().unwrap().unix_timestamp.abs() as f64) / (60.0 * 60.0 * 24.0)) as u128).to_string().as_bytes().as_ref(),
+            (((Clock::get()
+                .unwrap()
+                .unix_timestamp.abs() as f64) / (60.0 * 60.0 * 24.0)) as u128)
+                    .to_string()
+                    .as_bytes()
+                    .as_ref(),
         ], 
         bump
     )]
@@ -94,13 +241,19 @@ pub struct PostLink<'info> {
     #[account(
         mut,
         seeds = [
-            (((Clock::get().unwrap().unix_timestamp.abs() as f64) / (60.0 * 60.0 * 24.0)) as u128).to_string().as_bytes().as_ref(),
-        ],
+            (((Clock::get()
+                .unwrap()
+                .unix_timestamp.abs() as f64) / (60.0 * 60.0 * 24.0)) as u128)
+                    .to_string()
+                    .as_bytes()
+                    .as_ref(),
+        ], 
         bump = post_store.bump
     )]
     pub post_store: Account<'info, PostStore>,
 
     #[account(
+        constraint = Post::is_valid_post_size(&link) @ ErrorCode::LinkInvalidSize,
         init,
         payer = authority,
         space = Post::LEN,
@@ -159,8 +312,12 @@ pub struct UpvotePost<'info> {
     #[account(
         mut,
         seeds = [
-            // incorrect seed. use time stamp
-            post.key().as_ref()
+            (((Clock::get()
+                .unwrap()
+                .unix_timestamp.abs() as f64) / (60.0 * 60.0 * 24.0)) as u128)
+                    .to_string()
+                    .as_bytes()
+                    .as_ref(),
         ], 
         bump = post_store.bump
     )]
@@ -324,11 +481,8 @@ pub struct UpvoteComment<'info> {
 }
 
 
-// create pointer to content
-// like content
-// comment on content
-// earn rewards on content
 
+const EMPTY: usize = 0;
 const DISCRIMATOR: usize = 8;
 const PUBKEY: usize = 32;
 const UNSIGNED_64: usize = 8;
@@ -373,6 +527,15 @@ pub struct Post {
 impl Post {
     pub const LEN: usize =
         DISCRIMATOR + PUBKEY + STRING_PREFIX + MAX_LINK_SIZE + UNSIGNED_64 + UNSIGNED_64 + BUMP;
+
+    pub fn is_valid_post_size(link: &String) -> bool {
+
+        if link.len() >= MAX_COMMENT_SIZE || link.len() == EMPTY  {
+            return false
+        }
+
+        return true;
+    }
 }
 
 #[account]
@@ -406,4 +569,6 @@ pub enum ErrorCode {
     OverflowUnderflow,
     NoTextSubmitted,
     CommentTooLarge,
+    LinkTooLarge,
+    LinkInvalidSize,
 }
