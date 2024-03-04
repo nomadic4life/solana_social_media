@@ -13,3 +13,16 @@ pub mod solana_social_media {
 
 #[derive(Accounts)]
 pub struct Initialize {}
+
+// create pointer to content
+// like content
+// comment on content
+// earn rewards on content
+
+#[error_code]
+pub enum ErrorCode {
+    LinkAlreadySubmitted,
+    OverflowUnderflow,
+    NoTextSubmitted,
+    CommentTooLarge,
+}
