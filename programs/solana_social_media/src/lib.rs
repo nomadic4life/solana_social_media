@@ -7,7 +7,6 @@ pub mod solana_social_media {
     use super::*;
 
     // LOGIC
-    // implement update fees
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
 
         let Initialize {
@@ -43,8 +42,9 @@ pub mod solana_social_media {
             ..
         } = ctx.accounts;
 
-        payout_fees(treasury,authority,senddit, None);
+        payout_fees(treasury, authority, senddit, None);
 
+        // the authority? what do we do with it?
         post_store.posts = 0;
         post_store.bump = ctx.bumps.post_store;
 
@@ -64,7 +64,7 @@ pub mod solana_social_media {
 
 
 
-        payout_fees(poster_wallet,authority,senddit, Some(treasury));
+        payout_fees(poster_wallet, authority, senddit, Some(treasury));
 
         post_store.posts = post_store
             .posts.checked_add(1)
@@ -90,7 +90,7 @@ pub mod solana_social_media {
             ..
         } = ctx.accounts;
 
-        payout_fees(poster_wallet,authority,senddit, Some(treasury));
+        payout_fees(poster_wallet, authority, senddit, Some(treasury));
 
         post.upvotes = post
             .upvotes
@@ -99,6 +99,77 @@ pub mod solana_social_media {
 
         return Ok(());
     }
+
+
+    pub fn init_comment_store(ctx: Context<InitCommentStore>) -> Result<()> {
+        let InitCommentStore {
+            senddit,
+            treasury,
+            comment_store,
+            authority,
+            ..
+        } = ctx.accounts;
+
+        payout_fees(treasury, authority ,senddit, None);
+
+        // the authority? what do we do with it?
+        comment_store.comments = 0;
+        comment_store.bump = ctx.bumps.comment_store;
+
+        return Ok(());
+    }
+
+    pub fn post_comment(ctx: Context<PostComment>, input: String) -> Result<()> {
+        let PostComment {
+            senddit,
+            treasury,
+            comment_store,
+            authority,
+            commenter_wallet,
+            comment,
+            post,
+            ..
+        } = ctx.accounts;
+
+        payout_fees(commenter_wallet, authority, senddit, Some(treasury));
+
+        post.comments = post.comments
+            .checked_add(1)
+            .ok_or(ErrorCode::OverflowUnderflow)?;
+
+        comment_store.comments = comment_store.comments
+            .checked_add(1)
+            .ok_or(ErrorCode::OverflowUnderflow)?;
+
+        comment.authority = authority.key();
+        comment.comment = input;
+        comment.upvotes = 1;
+        comment.comments  = 0;
+        comment.bump = ctx.bumps.comment;
+
+        return Ok(());
+    }
+
+    pub fn upvote_comment(ctx: Context<UpvoteComment>, _number: String) -> Result<()>  {
+        let UpvoteComment {
+            senddit,
+            treasury,
+            comment,
+            authority, 
+            commenter_wallet,
+            ..
+        } = ctx.accounts;
+
+        payout_fees(commenter_wallet, authority, senddit, Some(treasury));
+
+        comment.upvotes = comment
+            .upvotes
+            .checked_add(1)
+            .ok_or(ErrorCode::OverflowUnderflow)?;
+
+        return Ok(());
+    }
+
 
 }
 
