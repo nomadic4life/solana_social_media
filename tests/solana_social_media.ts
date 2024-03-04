@@ -64,6 +64,22 @@ describe("solana_social_media", () => {
           keypair: account, type: 'poster_a'
         })
       }
+
+      {
+        const account = anchor.web3.Keypair.generate()
+
+        const tx = await provider.connection.requestAirdrop(account.publicKey, 10000 * LAMPORTS_PER_SOL)
+        const blockhash = await provider.connection.getLatestBlockhash()
+
+        await provider.connection.confirmTransaction({
+          ...blockhash,
+          signature: tx
+        }, 'confirmed')
+
+        users.push({
+          keypair: account, type: 'comment_a'
+        })
+      }
     }
 
 
@@ -112,6 +128,20 @@ describe("solana_social_media", () => {
 
         users.push({
           publicKey: postLink, link, count: postcount, collision: post_pda, type: 'post_link'
+        })
+      }
+
+      {
+        const post = users.find(user => user.type === 'post_link')
+        const [commentStore] = anchor.web3.PublicKey.findProgramAddressSync(
+          [
+            post.publicKey.toBuffer(),
+          ],
+          program.programId
+        )
+
+        users.push({
+          publicKey: commentStore, type: 'comment_store'
         })
       }
 
@@ -227,6 +257,37 @@ describe("solana_social_media", () => {
         systemProgram: anchor.web3.SystemProgram.programId
       })
       .signers([treasury])
+      .rpc();
+
+    const blockhash = await provider.connection.getLatestBlockhash()
+    await provider.connection.confirmTransaction({
+      ...blockhash,
+      signature: tx
+    }, 'confirmed')
+  });
+
+
+  it("Init Comment Store!", async () => {
+
+    const payer = users.find(user => user.type === 'comment_a').keypair
+    const treasury = users.find(user => user.type === 'treasury').keypair
+    const senddit = users.find(user => user.type === 'senddit')
+    const commentStore = users.find(user => user.type === 'comment_store')
+    const post = users.find(user => user.type === 'post_link')
+
+
+
+    const tx = await program.methods
+      .initCommentStore()
+      .accounts({
+        authority: payer.publicKey,
+        treasury: treasury.publicKey,
+        senddit: senddit.publicKey,
+        commentStore: commentStore.publicKey,
+        post: post.publicKey,
+        systemProgram: anchor.web3.SystemProgram.programId
+      })
+      .signers([payer])
       .rpc();
 
     const blockhash = await provider.connection.getLatestBlockhash()

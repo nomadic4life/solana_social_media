@@ -620,7 +620,7 @@ pub struct CommentStore {
 }
 
 impl CommentStore {
-    pub const LEN: usize = DISCRIMATOR + PUBKEY + USIGNED_128;
+    pub const LEN: usize = DISCRIMATOR + PUBKEY + USIGNED_128 + BUMP;
 }
 
 #[account]
