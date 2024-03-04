@@ -111,7 +111,7 @@ describe("solana_social_media", () => {
         )
 
         users.push({
-          publicKey: postLink, link, collision: post_pda, type: 'post_link'
+          publicKey: postLink, link, count: postcount, collision: post_pda, type: 'post_link'
         })
       }
 
@@ -203,6 +203,40 @@ describe("solana_social_media", () => {
       signature: tx
     }, 'confirmed')
   });
+
+
+  it("Upvote Post!", async () => {
+
+    const senddit = users.find(user => user.type === 'senddit')
+    const treasury = users.find(user => user.type === 'treasury').keypair
+
+    // const payer = users.find(user => user.type === 'poster_b').keypair
+    const postStore = users.find(user => user.type === 'post_store')
+    const posterWallet = users.find(user => user.type === 'poster_a').keypair
+    const post = users.find(user => user.type === 'post_link')
+
+    const tx = await program.methods
+      .upvotePost(post.count.toString())
+      .accounts({
+        authority: treasury.publicKey,
+        treasury: treasury.publicKey,
+        senddit: senddit.publicKey,
+        postStore: postStore.publicKey,
+        posterWallet: posterWallet.publicKey,
+        post: post.publicKey,
+        systemProgram: anchor.web3.SystemProgram.programId
+      })
+      .signers([treasury])
+      .rpc();
+
+    const blockhash = await provider.connection.getLatestBlockhash()
+    await provider.connection.confirmTransaction({
+      ...blockhash,
+      signature: tx
+    }, 'confirmed')
+  });
+
+
 });
 
 // sessions
