@@ -100,7 +100,6 @@ pub mod solana_social_media {
         return Ok(());
     }
 
-
     pub fn init_comment_store(ctx: Context<InitCommentStore>) -> Result<()> {
         let InitCommentStore {
             senddit,
@@ -119,7 +118,7 @@ pub mod solana_social_media {
         return Ok(());
     }
 
-    pub fn post_comment(ctx: Context<PostComment>, input: String) -> Result<()> {
+    pub fn post_comment(ctx: Context<PostComment>, input: String, reply: Option<Pubkey>) -> Result<()> {
         let PostComment {
             senddit,
             treasury,
@@ -146,6 +145,8 @@ pub mod solana_social_media {
         comment.upvotes = 1;
         comment.comments  = 0;
         comment.bump = ctx.bumps.comment;
+        comment.reply_to = reply;
+
 
         return Ok(());
     }
@@ -169,7 +170,6 @@ pub mod solana_social_media {
 
         return Ok(());
     }
-
 
 }
 
@@ -626,6 +626,7 @@ pub struct Comment {
     pub comment: String,
     pub upvotes: u64,
     pub comments: u64,
+    pub reply_to: Option<Pubkey>,
     pub bump: u8,
 }
 
